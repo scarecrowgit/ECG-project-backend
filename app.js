@@ -60,7 +60,46 @@ app.post('/api/ecg-data', async (req, res) => {
         });
     }
 });
+// Endpoint to fetch the last 5 minutes of ECG data for a given user_id
+app.get('/api/ecg-data', async (req, res) => {
+    const { user_id } = req.query;
 
+    // Validate user_id
+    if (!user_id) {
+        return res.status(400).json({
+            message: 'user_id is required as a query parameter.',
+        });
+    }
+
+    try {
+        // Get the current timestamp and calculate the cutoff time
+        const currentTime = new Date();
+        const cutoffTime = new Date(currentTime.getTime() - 5 * 60 * 1000);
+
+        // Query to fetch the last 5 minutes of data for the given user_id
+        const fetchQuery = `
+            SELECT ecg_signal, timestamp
+            FROM ecg_data
+            WHERE user_id = $1 AND timestamp >= $2
+            ORDER BY timestamp DESC
+        `;
+
+        // Execute the query
+        const result = await pool.query(fetchQuery, [user_id, cutoffTime.toISOString()]);
+
+        // Send the data as a response
+        res.json({
+            message: 'Successfully fetched ECG data.',
+            data: result.rows,
+        });
+    } catch (error) {
+        console.error('Error fetching data from the database:', error);
+        res.status(500).json({
+            message: 'Error fetching ECG data from the database.',
+            error: error.message,
+        });
+    }
+});
 // Start the Server
 const PORT = 3000;
 app.listen(PORT, () => {
