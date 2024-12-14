@@ -9,10 +9,19 @@ app.get('/api', (req, res) => {
     res.json({ message: 'Welcome to the API!' });
 });
 
-app.post('/api/data', (req, res) => {
+app.post('/api/ecg-data', (req, res) => {
     const data = req.body;
+
+    if (!Array.isArray(data) || data.length === 0) {
+        return res.status(400).json({
+            message: 'Invalid data format. Expected a non-empty array of ECG data points.'
+        });
+    }
+
+    console.log('Received ECG data:', data);
+
     res.json({
-        message: 'Data received successfully!',
+        message: 'ECG data received successfully!',
         receivedData: data,
     });
 });
