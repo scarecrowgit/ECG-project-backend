@@ -4,21 +4,22 @@ const bcrypt = require('bcrypt'); // Для хэширования пароле�
 const crypto = require('crypto'); // Для генерации уникального кода
 const app = express();
 const cors = require('cors');
+require('dotenv').config();
 
-// PostgreSQL configuration
+// PostgreSQL configuration from .env file
 const pool = new Pool({
-    user: 'postgres',
-    host: 'localhost',
-    database: 'postgres',
-    password: '12345678910',
-    port: 5433,
+    user: process.env.DB_USER,
+    host: process.env.DB_HOST,
+    database: process.env.DB_DATABASE,
+    password: process.env.DB_PASSWORD,
+    port: process.env.DB_PORT,
 });
 
 const corsOptions = {
-    origin: 'http://localhost:3000', // Разрешаем доступ с фронтенда (можно использовать * для всех доменов)
+    origin: process.env.FRONTEND_URL, // Разрешаем доступ с фронтенда
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-  };
+};
   
 app.use(cors(corsOptions));
 
@@ -36,6 +37,9 @@ const generateUserId = () => {
 };
 
 // Endpoint for user registration
+// POST /api/register
+// Request body: { "login": "user_login", "password": "user_password" }
+// Response: { "message": "User registered successfully!", "user_id": "random_user_id" }
 app.post('/api/register', async (req, res) => {
     const { login, password } = req.body;
 
@@ -73,6 +77,9 @@ app.post('/api/register', async (req, res) => {
 });
 
 // Endpoint for user login
+// POST /api/login
+// Request body: { "login": "user_login", "password": "user_password" }
+// Response: { "message": "Login successful!", "user_id": "user_id" }
 app.post('/api/login', async (req, res) => {
     const { login, password } = req.body;
 
@@ -108,10 +115,12 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// Other endpoints (e.g., ECG data handling)
-// Existing endpoints are not modified
+// Endpoint for saving ECG data
+// POST /api/ecg-data
+// Request body: { "user_id": "user_id", "data": [{ "ecg_signal": 123, "timestamp": "2024-12-15T10:00:00Z" }, ...] }
+// Response: { "message": "ECG data saved successfully!", "receivedData": [...data] }
 app.post('/api/ecg-data', async (req, res) => {
-    const data = req.body;
+    const { user_id, data } = req.body;
 
     // Validate the data format
     if (!Array.isArray(data) || data.length === 0) {
@@ -120,7 +129,13 @@ app.post('/api/ecg-data', async (req, res) => {
         });
     }
 
-    console.log('Received ECG data:', data);
+    if (!user_id) {
+        return res.status(400).json({
+            message: 'user_id is required.'
+        });
+    }
+
+    console.log('Received ECG data for user:', user_id, data);
 
     // Prepare the insert query
     const insertQuery = `
@@ -128,13 +143,10 @@ app.post('/api/ecg-data', async (req, res) => {
         VALUES ($1, $2, $3)
     `;
 
-    // Hardcode user_id for testing
-    const user_id = 'test_user_id';
-
     // Loop through the data array and insert each ECG data point
     try {
         for (const dataPoint of data) {
-            const { ecg_signal, timestamp } = dataPoint; // Now receiving timestamp
+            const { ecg_signal, timestamp } = dataPoint;
             await pool.query(insertQuery, [user_id, ecg_signal, timestamp]);
         }
 
@@ -150,7 +162,11 @@ app.post('/api/ecg-data', async (req, res) => {
         });
     }
 });
+
 // Endpoint to fetch the last 5 minutes of ECG data for a given user_id
+// GET /api/ecg-data?user_id=some_user_id
+// Query Parameter: user_id (required)
+// Response: { "message": "Successfully fetched ECG data.", "data": [{ "ecg_signal": 123, "timestamp": "2024-12-15T10:00:00Z" }, ...] }
 app.get('/api/ecg-data', async (req, res) => {
     const { user_id } = req.query;
 
@@ -162,11 +178,9 @@ app.get('/api/ecg-data', async (req, res) => {
     }
 
     try {
-        // Get the current timestamp and calculate the cutoff time
         const currentTime = new Date();
-        const cutoffTime = new Date(currentTime.getTime() - 5 * 60 * 1000);
+        const cutoffTime = new Date(currentTime.getTime() - 15 * 1000);
 
-        // Query to fetch the last 5 minutes of data for the given user_id
         const fetchQuery = `
             SELECT ecg_signal, timestamp
             FROM ecg_data
@@ -174,10 +188,8 @@ app.get('/api/ecg-data', async (req, res) => {
             ORDER BY timestamp DESC
         `;
 
-        // Execute the query
         const result = await pool.query(fetchQuery, [user_id, cutoffTime.toISOString()]);
 
-        // Send the data as a response
         res.json({
             message: 'Successfully fetched ECG data.',
             data: result.rows,
@@ -190,8 +202,8 @@ app.get('/api/ecg-data', async (req, res) => {
         });
     }
 });
-// Start the Server
-const PORT = 8000;
+
+const PORT = process.env.BACKEND_PORT || 8000; // Порт из .env или 8000 по умолчанию
 app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
 });
